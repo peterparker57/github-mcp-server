@@ -10,7 +10,7 @@ import {
 
 import { GitHubServiceImpl, parseGitHubAccounts } from './services/github.js';
 import { handleListAccounts, handleSelectAccount, accountTools } from './handlers/account.js';
-import { handleCreateRepository, handleCloneRepository, repositoryTools } from './handlers/repository.js';
+import { handleCreateRepository, handleCloneRepository, handleRenameRepository, repositoryTools } from './handlers/repository.js';
 import {
   handleCreateOrUpdateFile,
   handleGetFile,
@@ -95,6 +95,8 @@ class GitHubServer {
             return await handleCreateRepository(this.githubService, args);
           case 'clone_repository':
             return await handleCloneRepository(this.githubService, args);
+          case 'rename_repository':
+            return await handleRenameRepository(this.githubService, args);
           case 'list_repository':
             return await handleListRepository(this.githubService, args);
 
