@@ -113,6 +113,34 @@ function parseGitHubAccounts(): Array<{ owner: string; token: string }> {
   return accounts;
 }
 
+export async function handleRenameRepository(
+  githubService: GitHubService,
+  args: Record<string, unknown> | undefined
+): Promise<ToolResponse> {
+  if (!args) throw new Error('Arguments are required');
+  const { owner, repo, new_name } = args;
+  console.error('Renaming repository:', { owner, repo, new_name });
+
+  try {
+    const octokit = githubService.getOctokitForOwner(owner as string | undefined);
+    const effectiveOwner = githubService.getEffectiveOwner(owner as string | undefined);
+
+    const response = await octokit.repos.update({
+      owner: effectiveOwner,
+      repo: repo as string,
+      name: new_name as string
+    });
+
+    return createResponse(response.data);
+  } catch (error: any) {
+    console.error('Rename repository error:', error);
+    throw new McpError(
+      ErrorCode.InternalError,
+      `Failed to rename repository: ${error.message}`
+    );
+  }
+}
+
 export const repositoryTools = [
   {
     name: 'create_repository',
@@ -164,6 +192,28 @@ export const repositoryTools = [
         }
       },
       required: ['repo', 'outputDir']
+    }
+  },
+  {
+    name: 'rename_repository',
+    description: 'Rename a GitHub repository',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        owner: {
+          type: 'string',
+          description: 'Repository owner (optional if account already selected)'
+        },
+        repo: {
+          type: 'string',
+          description: 'Current repository name'
+        },
+        new_name: {
+          type: 'string',
+          description: 'New repository name'
+        }
+      },
+      required: ['repo', 'new_name']
     }
   }
 ];
