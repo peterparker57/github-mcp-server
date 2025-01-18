@@ -7,6 +7,35 @@ import {
   ListToolsRequestSchema,
   McpError,
 } from '@modelcontextprotocol/sdk/types.js';
+import { promises as fsPromises } from 'fs';
+import { join } from 'path';
+
+interface Change {
+  timestamp: string;
+  description: string;
+  files?: string[];
+  type?: string;
+  committed?: boolean;
+}
+
+interface Project {
+  name: string;
+  path: string;
+  type: string;
+  description: string;
+  repository?: {
+    owner: string;
+    name: string;
+  };
+  status?: string;
+  technologies?: string[];
+  lastCommit?: string;
+  changes?: Change[];
+}
+
+interface ProjectData {
+  projects: Project[];
+}
 
 import { GitHubServiceImpl, parseGitHubAccounts } from './services/github.js';
 import { handleListAccounts, handleSelectAccount, accountTools } from './handlers/account.js';
@@ -35,6 +64,68 @@ if (accounts.length === 0) {
 class GitHubServer {
   private server: Server;
   private githubService: GitHubServiceImpl;
+  private projects: Map<string, Project> = new Map();
+  private dataPath: string = join(
+    process.env.USERPROFILE || '',
+    'AppData',
+    'Roaming',
+    'Code',
+    'User',
+    'globalStorage',
+    'rooveterinaryinc.roo-cline',
+    'settings',
+    'devhub_projects.json'
+  );
+
+  private async loadProjects() {
+    try {
+      const data = await fsPromises.readFile(this.dataPath, 'utf8');
+      const { projects } = JSON.parse(data) as ProjectData;
+      this.projects = new Map(projects.map(p => [p.name, p]));
+      console.error(`Loaded ${projects.length} projects from disk`);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        console.error('No existing projects file found');
+        this.projects = new Map();
+      } else {
+        console.error('Error loading projects:', error);
+        throw error;
+      }
+    }
+  }
+
+  private async saveProjects() {
+    try {
+      const projects = Array.from(this.projects.values());
+      await fsPromises.mkdir(join(process.env.USERPROFILE || '', 'AppData', 'Roaming', 'Code', 'User', 'globalStorage', 'rooveterinaryinc.roo-cline', 'settings'), { recursive: true });
+      await fsPromises.writeFile(this.dataPath, JSON.stringify({ projects }, null, 2), 'utf8');
+      console.error(`Saved ${projects.length} projects to disk`);
+    } catch (error) {
+      console.error('Error saving projects:', error);
+      throw error;
+    }
+  }
+
+  private async clearProjectChanges(repo: string, commitSha: string): Promise<void> {
+    // Find project by repository name
+    const project = Array.from(this.projects.values()).find(p => p.repository?.name === repo);
+    if (!project) {
+      console.error(`No project found with repository name ${repo}`);
+      return;
+    }
+
+    if (!project.changes) return;
+    
+    // Mark changes as committed and remove them
+    project.changes = project.changes.map(change => ({ ...change, committed: true }));
+    project.changes = project.changes.filter(change => !change.committed);
+    
+    // Update last commit
+    project.lastCommit = commitSha;
+    
+    await this.saveProjects();
+    console.error(`Cleared changes for project ${project.name} after commit ${commitSha}`);
+  }
 
   constructor() {
     this.server = new Server(
@@ -54,9 +145,11 @@ class GitHubServer {
     
     this.setupToolHandlers();
     
-    // Error handling
+    // Load projects and set up error handling
+    this.loadProjects().catch(console.error);
     this.server.onerror = (error) => console.error('[MCP Error]', error);
     process.on('SIGINT', async () => {
+      await this.saveProjects();
       await this.server.close();
       process.exit(0);
     });
@@ -75,7 +168,7 @@ class GitHubServer {
     }));
 
     // Handle tool execution requests
-    this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    this.server.setRequestHandler(CallToolRequestSchema, async (request: { params: { name: string; arguments?: Record<string, unknown> } }) => {
       try {
         if (!request.params || typeof request.params !== 'object') {
           throw new McpError(ErrorCode.InvalidParams, 'Invalid request parameters');
@@ -120,7 +213,11 @@ class GitHubServer {
 
           // Commit operations
           case 'create_commit':
-            return await handleCreateCommit(this.githubService, args);
+            return await handleCreateCommit(
+              this.githubService,
+              args,
+              this.clearProjectChanges.bind(this)
+            );
           case 'list_commits':
             return await handleListCommits(this.githubService, args);
           case 'get_commit':
