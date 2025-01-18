@@ -83,6 +83,14 @@ class GitHubServer {
     try {
       const data = await fsPromises.readFile(this.dataPath, 'utf8');
       const { projects } = JSON.parse(data) as ProjectData;
+      
+      // Also check devhub's project state
+      const devhubPath = this.dataPath.replace('github_projects.json', 'projects.json');
+      const devhubData = await fsPromises.readFile(devhubPath, 'utf8');
+      const devhubProjects = JSON.parse(devhubData).projects;
+      
+      await debugLogger.log('DevHub project state:', { devhubProjects });
+      
       this.projects = new Map(projects.map(p => [p.name, p]));
       await debugLogger.log('Loaded projects:', { count: projects.length, projects });
     } catch (error) {
@@ -133,6 +141,12 @@ class GitHubServer {
   private async clearProjectChanges(repo: string, commitSha: string): Promise<void> {
     try {
       await debugLogger.log('clearProjectChanges called with:', { repo, commitSha });
+      
+      // Check devhub's project state before loading
+      const devhubPath = this.dataPath.replace('github_projects.json', 'projects.json');
+      const devhubData = await fsPromises.readFile(devhubPath, 'utf8');
+      const devhubProjects = JSON.parse(devhubData).projects;
+      await debugLogger.log('DevHub project state before clearing:', { devhubProjects });
       
       // Load latest projects data
       await this.loadProjects();
