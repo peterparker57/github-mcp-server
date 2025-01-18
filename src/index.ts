@@ -219,9 +219,10 @@ class GitHubServer {
               args,
               this.clearProjectChanges.bind(this)
             );
-            // Clear project changes after successful commit
+            // Clear project changes and update lastCommit after successful commit
             if (!result.isError && args?.repo) {
-              await this.clearProjectChanges(args.repo as string, (result.content[0].text as any).sha);
+              const commitSha = (result.content[0].text as any).sha;
+              await this.clearProjectChanges(args.repo as string, commitSha);
             }
             return result;
           case 'list_commits':
