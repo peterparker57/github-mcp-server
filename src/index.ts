@@ -85,8 +85,23 @@ class GitHubServer {
       console.error(`Loaded ${projects.length} projects from disk`);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-        console.error('No existing projects file found');
-        this.projects = new Map();
+        console.error('No existing projects file found, initializing with github-server project');
+        // Initialize with github-server project
+        this.projects = new Map([
+          ['github-server', {
+            name: 'github-server',
+            path: 'c:/Users/John Hickey/Documents/Cline/MCP/github-server',
+            type: 'mcp-server',
+            description: 'GitHub MCP Server providing tools for repository and file management',
+            repository: {
+              owner: 'peterparker57',
+              name: 'github-mcp-server'
+            },
+            changes: []
+          }]
+        ]);
+        // Save initial project data
+        await this.saveProjects();
       } else {
         console.error('Error loading projects:', error);
         throw error;
