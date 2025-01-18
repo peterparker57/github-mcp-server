@@ -134,14 +134,32 @@ export async function handleCreateCommit(
         
         // Then clear project changes
         if (notifyDevHub) {
-          await debugLogger.log('Calling notifyDevHub to clear changes:', {
-            repo,
-            sha: newCommit.data.sha,
-            notifyDevHubFunction: notifyDevHub.toString()
+          await debugLogger.log('Examining notifyDevHub function:', {
+            type: typeof notifyDevHub,
+            isFunction: typeof notifyDevHub === 'function',
+            hasPrototype: notifyDevHub.hasOwnProperty('prototype'),
+            functionString: notifyDevHub.toString(),
+            functionName: notifyDevHub.name,
+            boundProperties: Object.keys(notifyDevHub),
+            thisValue: notifyDevHub.hasOwnProperty('call') ? Object.keys(notifyDevHub.call) : null
           });
 
-          await notifyDevHub(repo, newCommit.data.sha);
-          await debugLogger.log('Successfully cleared changes for commit');
+          await debugLogger.log('Preparing to call notifyDevHub with:', {
+            repo,
+            sha: newCommit.data.sha
+          });
+
+          try {
+            await notifyDevHub(repo, newCommit.data.sha);
+            await debugLogger.log('Successfully called notifyDevHub');
+          } catch (callError: any) {
+            await debugLogger.log('Error calling notifyDevHub:', {
+              error: callError.toString(),
+              errorMessage: callError.message,
+              errorStack: callError.stack
+            });
+            throw callError;
+          }
         } else {
           await debugLogger.log('No notifyDevHub function provided');
         }

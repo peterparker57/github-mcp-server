@@ -38,6 +38,7 @@ interface ProjectData {
 }
 
 import { GitHubServiceImpl, parseGitHubAccounts } from './services/github.js';
+import { debugLogger } from './utils/debug-logger.js';
 import { handleListAccounts, handleSelectAccount, accountTools } from './handlers/account.js';
 import { handleCreateRepository, handleCloneRepository, handleRenameRepository, repositoryTools } from './handlers/repository.js';
 import {
@@ -78,14 +79,15 @@ class GitHubServer {
   );
 
   private async loadProjects() {
+    await debugLogger.log('Loading projects from:', { path: this.dataPath });
     try {
       const data = await fsPromises.readFile(this.dataPath, 'utf8');
       const { projects } = JSON.parse(data) as ProjectData;
       this.projects = new Map(projects.map(p => [p.name, p]));
-      console.error(`Loaded ${projects.length} projects from disk`);
+      await debugLogger.log('Loaded projects:', { count: projects.length, projects });
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-        console.error('No existing projects file found, initializing with github-server project');
+        await debugLogger.log('No existing projects file found, initializing with github-server project');
         // Initialize with github-server project
         this.projects = new Map([
           ['github-server', {
@@ -103,44 +105,61 @@ class GitHubServer {
         // Save initial project data
         await this.saveProjects();
       } else {
-        console.error('Error loading projects:', error);
+        await debugLogger.log('Error loading projects:', { error });
         throw error;
       }
     }
   }
 
   private async saveProjects() {
+    await debugLogger.log('Saving projects:', {
+      path: this.dataPath,
+      projects: Array.from(this.projects.values())
+    });
+    
     try {
       const projects = Array.from(this.projects.values());
-      console.error('Saving projects:', JSON.stringify(projects, null, 2));
       
       await fsPromises.mkdir(join(process.env.USERPROFILE || '', 'AppData', 'Roaming', 'Code', 'User', 'globalStorage', 'rooveterinaryinc.roo-cline', 'settings'), { recursive: true });
       await fsPromises.writeFile(this.dataPath, JSON.stringify({ projects }, null, 2), 'utf8');
       
-      console.error(`Saved ${projects.length} projects to disk at ${this.dataPath}`);
+      await debugLogger.log('Successfully saved projects', { count: projects.length });
     } catch (error) {
-      console.error('Error saving projects:', error);
+      await debugLogger.log('Error saving projects:', { error });
       throw error;
     }
   }
 
   private async clearProjectChanges(repo: string, commitSha: string): Promise<void> {
     try {
-      console.error('clearProjectChanges called with:', { repo, commitSha });
+      await debugLogger.log('clearProjectChanges called with:', { repo, commitSha });
       
       // Load latest projects data
       await this.loadProjects();
       
       // Find project by repository name (case-insensitive)
+      await debugLogger.log('Searching for project with repository name:', {
+        searchRepo: repo,
+        allProjects: Array.from(this.projects.values()).map(p => ({
+          projectName: p.name,
+          repoName: p.repository?.name
+        }))
+      });
+
       const project = Array.from(this.projects.values()).find(p =>
         p.repository?.name?.toLowerCase() === repo.toLowerCase()
       );
       
       if (!project) {
+        await debugLogger.log('No project found with repository name:', { repo });
         throw new Error(`No project found with repository name ${repo}`);
       }
 
-      console.error('Found project:', project.name);
+      await debugLogger.log('Found project:', {
+        name: project.name,
+        currentChanges: project.changes,
+        currentLastCommit: project.lastCommit
+      });
       
       // Create a new project object with cleared changes
       const updatedProject = {
@@ -152,12 +171,18 @@ class GitHubServer {
       // Update the project in the Map
       this.projects.set(project.name, updatedProject);
       
+      await debugLogger.log('Updated project:', {
+        name: project.name,
+        newChanges: updatedProject.changes,
+        newLastCommit: updatedProject.lastCommit
+      });
+      
       // Save changes to disk
       await this.saveProjects();
       
-      console.error(`Successfully cleared changes for ${project.name} and updated lastCommit to ${commitSha}`);
+      await debugLogger.log('Successfully cleared changes and updated lastCommit');
     } catch (error) {
-      console.error('Failed to clear project changes:', error);
+      await debugLogger.log('Failed to clear project changes:', { error });
       throw error; // Re-throw to be handled by commit handler
     }
   }
@@ -249,10 +274,24 @@ class GitHubServer {
 
           // Commit operations
           case 'create_commit':
+            await debugLogger.log('Setting up clearProjectChanges for commit:', {
+              hasProjects: !!this.projects,
+              projectCount: this.projects.size,
+              dataPath: this.dataPath,
+              thisContext: Object.keys(this)
+            });
+
+            const boundClearProjectChanges = this.clearProjectChanges.bind(this);
+            await debugLogger.log('Bound clearProjectChanges:', {
+              isBound: boundClearProjectChanges.hasOwnProperty('prototype'),
+              boundFunction: boundClearProjectChanges.toString(),
+              boundThis: Object.keys(boundClearProjectChanges.call)
+            });
+
             return await handleCreateCommit(
               this.githubService,
               args,
-              this.clearProjectChanges.bind(this)
+              boundClearProjectChanges
             );
           case 'list_commits':
             return await handleListCommits(this.githubService, args);
