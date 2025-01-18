@@ -99,28 +99,27 @@ export async function handleCreateCommit(
       sha: newCommit.data.sha
     });
 
-    // Only notify DevHub if commit was successful
+    // Clear project changes after successful commit
     if (newCommit.data && newCommit.data.sha) {
-      if (notifyDevHub) {
-        try {
-          // First verify the commit exists
-          await octokit.git.getCommit({
-            owner: effectiveOwner,
-            repo,
-            commit_sha: newCommit.data.sha
-          });
-          
-          // Then notify DevHub
+      try {
+        // First verify the commit exists
+        await octokit.git.getCommit({
+          owner: effectiveOwner,
+          repo,
+          commit_sha: newCommit.data.sha
+        });
+        
+        // Then clear project changes
+        if (notifyDevHub) {
           await notifyDevHub(repo, newCommit.data.sha);
-          console.error('Successfully notified DevHub to clear changes for commit:', newCommit.data.sha);
-        } catch (error) {
-          console.error('Failed to update DevHub project data:', error);
-          // Return error response to indicate changes weren't cleared
-          return createResponse({
-            commit: newCommit.data,
-            warning: 'Commit successful but failed to clear changes in DevHub'
-          });
+          console.error('Successfully cleared changes for commit:', newCommit.data.sha);
         }
+      } catch (error) {
+        console.error('Failed to clear project changes:', error);
+        return createResponse({
+          commit: newCommit.data,
+          warning: 'Commit successful but failed to clear project changes'
+        });
       }
     } else {
       console.error('Invalid commit response:', newCommit);
