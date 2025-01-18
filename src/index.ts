@@ -130,7 +130,9 @@ class GitHubServer {
     // Update the project in the Map with the new state
     this.projects.set(project.name, updatedProject);
     
+    // Force a save to disk
     await this.saveProjects();
+    console.error(`Updated project ${project.name} with new commit ${commitSha}`);
     console.error(`Cleared changes for project ${project.name} after commit ${commitSha}`);
   }
 
