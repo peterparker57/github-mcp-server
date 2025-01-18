@@ -85,7 +85,7 @@ class GitHubServer {
       const { projects } = JSON.parse(data) as ProjectData;
       
       // Also check devhub's project state
-      const devhubPath = this.dataPath.replace('github_projects.json', 'projects.json');
+      const devhubPath = this.dataPath.replace('github_projects.json', 'devhub_projects.json');
       const devhubData = await fsPromises.readFile(devhubPath, 'utf8');
       const devhubProjects = JSON.parse(devhubData).projects;
       
@@ -143,7 +143,7 @@ class GitHubServer {
       await debugLogger.log('clearProjectChanges called with:', { repo, commitSha });
       
       // Check devhub's project state before loading
-      const devhubPath = this.dataPath.replace('github_projects.json', 'projects.json');
+      const devhubPath = this.dataPath.replace('github_projects.json', 'devhub_projects.json');
       const devhubData = await fsPromises.readFile(devhubPath, 'utf8');
       const devhubProjects = JSON.parse(devhubData).projects;
       await debugLogger.log('DevHub project state before clearing:', { devhubProjects });
