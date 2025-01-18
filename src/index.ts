@@ -107,6 +107,9 @@ class GitHubServer {
   }
 
   private async clearProjectChanges(repo: string, commitSha: string): Promise<void> {
+    console.error('clearProjectChanges called with:', { repo, commitSha });
+    console.error('Current projects:', JSON.stringify(Array.from(this.projects.entries()), null, 2));
+
     // Find project by repository name
     const project = Array.from(this.projects.values()).find(p => p.repository?.name === repo);
     if (!project) {
@@ -114,6 +117,7 @@ class GitHubServer {
       return;
     }
 
+    console.error('Found project:', project);
     if (!project.changes) return;
     
     // Create a new project object with the updates (immutable update)
@@ -148,13 +152,18 @@ class GitHubServer {
     
     this.setupToolHandlers();
     
-    // Load projects and set up error handling
-    this.loadProjects().catch(console.error);
+    // Set up error handling
     this.server.onerror = (error) => console.error('[MCP Error]', error);
     process.on('SIGINT', async () => {
       await this.saveProjects();
       await this.server.close();
       process.exit(0);
+    });
+
+    // Load projects immediately
+    this.loadProjects().catch(error => {
+      console.error('Failed to load projects:', error);
+      process.exit(1);
     });
   }
 
@@ -245,9 +254,19 @@ class GitHubServer {
   }
 
   async run(): Promise<void> {
-    const transport = new StdioServerTransport();
-    await this.server.connect(transport);
-    console.error('GitHub MCP server running on stdio');
+    try {
+      // Load projects before starting server
+      await this.loadProjects();
+      console.error('Projects loaded successfully');
+
+      // Start the server after projects are loaded
+      const transport = new StdioServerTransport();
+      await this.server.connect(transport);
+      console.error('GitHub MCP server running on stdio');
+    } catch (error) {
+      console.error('Failed to start server:', error);
+      throw error;
+    }
   }
 }
 
