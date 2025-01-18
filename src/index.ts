@@ -130,7 +130,7 @@ class GitHubServer {
     // Create a new project object with the updates (immutable update)
     const updatedProject = {
       ...project,
-      changes: project.changes.filter(change => !change.committed).map(change => ({ ...change, committed: true })),
+      changes: project.changes.map(change => ({ ...change, committed: true })).filter(change => !change.committed),
       lastCommit: commitSha
     };
     
