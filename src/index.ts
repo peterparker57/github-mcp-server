@@ -110,38 +110,41 @@ class GitHubServer {
   }
 
   private async clearProjectChanges(repo: string, commitSha: string): Promise<void> {
-    console.error('clearProjectChanges called with:', { repo, commitSha });
-    console.error('Current projects:', JSON.stringify(Array.from(this.projects.entries()), null, 2));
+    try {
+      console.error('clearProjectChanges called with:', { repo, commitSha });
+      
+      // Load latest projects data
+      await this.loadProjects();
+      
+      // Find project by repository name (case-insensitive)
+      const project = Array.from(this.projects.values()).find(p =>
+        p.repository?.name?.toLowerCase() === repo.toLowerCase()
+      );
+      
+      if (!project) {
+        throw new Error(`No project found with repository name ${repo}`);
+      }
 
-    // Find project by repository name (case-insensitive)
-    console.error('Looking for project with repo:', repo);
-    const project = Array.from(this.projects.values()).find(p => {
-      console.error('Checking project:', p.name, 'with repo:', p.repository?.name);
-      return p.repository?.name?.toLowerCase() === repo.toLowerCase();
-    });
-    if (!project) {
-      console.error(`No project found with repository name ${repo}`);
-      return;
+      console.error('Found project:', project.name);
+      
+      // Create a new project object with cleared changes
+      const updatedProject = {
+        ...project,
+        changes: [], // Clear all changes
+        lastCommit: commitSha
+      };
+      
+      // Update the project in the Map
+      this.projects.set(project.name, updatedProject);
+      
+      // Save changes to disk
+      await this.saveProjects();
+      
+      console.error(`Successfully cleared changes for ${project.name} and updated lastCommit to ${commitSha}`);
+    } catch (error) {
+      console.error('Failed to clear project changes:', error);
+      throw error; // Re-throw to be handled by commit handler
     }
-
-    console.error('Found project:', project);
-    if (!project.changes) return;
-    
-    // Create a new project object with the updates (immutable update)
-    const updatedProject = {
-      ...project,
-      // First mark all changes as committed
-      changes: [],
-      lastCommit: commitSha
-    };
-    
-    // Update the project in the Map with the new state
-    this.projects.set(project.name, updatedProject);
-    
-    // Force a save to disk
-    await this.saveProjects();
-    console.error(`Updated project ${project.name} with new commit ${commitSha}`);
-    console.error(`Cleared changes for project ${project.name} after commit ${commitSha}`);
   }
 
   constructor() {

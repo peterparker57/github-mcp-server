@@ -99,19 +99,35 @@ export async function handleCreateCommit(
       sha: newCommit.data.sha
     });
 
-    const response = createResponse(newCommit.data);
-
-    // Update DevHub project data with the new commit
-    if (notifyDevHub) {
-      try {
-        await notifyDevHub(`${repo}-mcp-server`, newCommit.data.sha);
-      } catch (error) {
-        // Log but don't fail if DevHub update fails
-        console.error('Failed to update DevHub project data:', error);
+    // Only notify DevHub if commit was successful
+    if (newCommit.data && newCommit.data.sha) {
+      if (notifyDevHub) {
+        try {
+          // First verify the commit exists
+          await octokit.git.getCommit({
+            owner: effectiveOwner,
+            repo,
+            commit_sha: newCommit.data.sha
+          });
+          
+          // Then notify DevHub
+          await notifyDevHub(`${repo}-mcp-server`, newCommit.data.sha);
+          console.error('Successfully notified DevHub of commit:', newCommit.data.sha);
+        } catch (error) {
+          console.error('Failed to update DevHub project data:', error);
+          // Return error response to indicate changes weren't cleared
+          return createResponse({
+            commit: newCommit.data,
+            warning: 'Commit successful but failed to clear changes in DevHub'
+          });
+        }
       }
+    } else {
+      console.error('Invalid commit response:', newCommit);
+      throw new McpError(ErrorCode.InternalError, 'Invalid commit response from GitHub');
     }
 
-    return response;
+    return createResponse(newCommit.data);
   } catch (error: any) {
     console.error('Create commit error:', error);
     throw new McpError(
