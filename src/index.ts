@@ -140,7 +140,7 @@ class GitHubServer {
       }
     );
 
-    // Initialize GitHub service with accounts and default owner
+    // Initialize GitHub service with accounts and default owner (if provided)
     this.githubService = new GitHubServiceImpl(accounts, process.env.DEFAULT_OWNER);
     
     this.setupToolHandlers();
@@ -214,17 +214,11 @@ class GitHubServer {
 
           // Commit operations
           case 'create_commit':
-            result = await handleCreateCommit(
+            return await handleCreateCommit(
               this.githubService,
               args,
               this.clearProjectChanges.bind(this)
             );
-            // Clear project changes and update lastCommit after successful commit
-            if (!result.isError && args?.repo) {
-              const commitSha = (result.content[0].text as any).sha;
-              await this.clearProjectChanges(args.repo as string, commitSha);
-            }
-            return result;
           case 'list_commits':
             return await handleListCommits(this.githubService, args);
           case 'get_commit':
