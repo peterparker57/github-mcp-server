@@ -111,7 +111,8 @@ export async function handleCreateCommit(
           });
           
           // Then notify DevHub
-          await notifyDevHub(`${repo}-mcp-server`, newCommit.data.sha);
+          // Don't append -mcp-server since it's already part of the repo name
+          await notifyDevHub(repo, newCommit.data.sha);
           console.error('Successfully notified DevHub of commit:', newCommit.data.sha);
         } catch (error) {
           console.error('Failed to update DevHub project data:', error);
