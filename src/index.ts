@@ -109,32 +109,6 @@ class GitHubServer {
     }
   }
 
-  private async notifyDevHub(repo: string, commitSha: string): Promise<void> {
-    try {
-      const response = await fetch('http://localhost:7000/mcp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          id: 1,
-          method: 'call_tool',
-          params: {
-            name: 'handle_github_commit',
-            arguments: {
-              repo: repo,
-              commit_sha: commitSha
-            }
-          }
-        })
-      });
-      const result = await response.text();
-      console.error('DevHub response:', result);
-    } catch (error) {
-      console.error('Failed to notify DevHub:', error);
-      throw error;
-    }
-  }
-
   private async clearProjectChanges(repo: string, commitSha: string): Promise<void> {
     try {
       console.error('clearProjectChanges called with:', { repo, commitSha });
@@ -157,7 +131,7 @@ class GitHubServer {
       const updatedProject = {
         ...project,
         changes: [], // Clear all changes
-        lastCommit: commitSha
+        lastCommit: commitSha // Update the lastCommit
       };
       
       // Update the project in the Map
