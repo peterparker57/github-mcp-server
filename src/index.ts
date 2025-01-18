@@ -160,11 +160,6 @@ class GitHubServer {
       process.exit(0);
     });
 
-    // Load projects immediately
-    this.loadProjects().catch(error => {
-      console.error('Failed to load projects:', error);
-      process.exit(1);
-    });
   }
 
   private setupToolHandlers() {
@@ -257,7 +252,8 @@ class GitHubServer {
     try {
       // Load projects before starting server
       await this.loadProjects();
-      console.error('Projects loaded successfully');
+      console.error(`Projects loaded successfully: ${this.projects.size} projects`);
+      console.error('Projects:', JSON.stringify(Array.from(this.projects.entries()), null, 2));
 
       // Start the server after projects are loaded
       const transport = new StdioServerTransport();
