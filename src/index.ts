@@ -175,6 +175,7 @@ class GitHubServer {
         }
 
         const { name, arguments: args } = request.params;
+        let result;
 
         switch (name) {
           // Account management
@@ -213,11 +214,16 @@ class GitHubServer {
 
           // Commit operations
           case 'create_commit':
-            return await handleCreateCommit(
+            result = await handleCreateCommit(
               this.githubService,
               args,
               this.clearProjectChanges.bind(this)
             );
+            // Clear project changes after successful commit
+            if (!result.isError && args?.repo) {
+              await this.clearProjectChanges(args.repo as string, (result.content[0].text as any).sha);
+            }
+            return result;
           case 'list_commits':
             return await handleListCommits(this.githubService, args);
           case 'get_commit':
