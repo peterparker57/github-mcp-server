@@ -1,11 +1,13 @@
 import { GitHubService, ToolResponse, CommitOperation, createResponse } from '../types/index.js';
-import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
+import { McpError, ErrorCode, CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { promises as fs } from 'fs';
 import { resolve } from 'path';
 
 export async function handleCreateCommit(
   githubService: GitHubService,
-  args: Record<string, unknown> | undefined
+  args: Record<string, unknown> | undefined,
+  notifyDevHub?: (repo: string, commitSha: string) => Promise<void>
 ): Promise<ToolResponse> {
   if (!args) throw new Error('Arguments are required');
   const { owner, repo, branch, message, changes, author, sign } = args as CommitOperation;
@@ -97,7 +99,19 @@ export async function handleCreateCommit(
       sha: newCommit.data.sha
     });
 
-    return createResponse(newCommit.data);
+    const response = createResponse(newCommit.data);
+
+    // Update DevHub project data with the new commit
+    if (notifyDevHub) {
+      try {
+        await notifyDevHub(repo, newCommit.data.sha);
+      } catch (error) {
+        // Log but don't fail if DevHub update fails
+        console.error('Failed to update DevHub project data:', error);
+      }
+    }
+
+    return response;
   } catch (error: any) {
     console.error('Create commit error:', error);
     throw new McpError(
