@@ -111,9 +111,8 @@ export async function handleCreateCommit(
           });
           
           // Then notify DevHub
-          // Don't append -mcp-server since it's already part of the repo name
           await notifyDevHub(repo, newCommit.data.sha);
-          console.error('Successfully notified DevHub of commit:', newCommit.data.sha);
+          console.error('Successfully notified DevHub to clear changes for commit:', newCommit.data.sha);
         } catch (error) {
           console.error('Failed to update DevHub project data:', error);
           // Return error response to indicate changes weren't cleared
