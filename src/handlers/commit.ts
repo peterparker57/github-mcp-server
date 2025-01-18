@@ -104,7 +104,7 @@ export async function handleCreateCommit(
     // Update DevHub project data with the new commit
     if (notifyDevHub) {
       try {
-        await notifyDevHub(repo, newCommit.data.sha);
+        await notifyDevHub(`${repo}-mcp-server`, newCommit.data.sha);
       } catch (error) {
         // Log but don't fail if DevHub update fails
         console.error('Failed to update DevHub project data:', error);
