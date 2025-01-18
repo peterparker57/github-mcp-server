@@ -111,7 +111,7 @@ class GitHubServer {
 
   private async notifyDevHub(repo: string, commitSha: string): Promise<void> {
     try {
-      const response = await fetch('http://localhost:3000/mcp', {
+      const response = await fetch('http://localhost:7000/mcp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
