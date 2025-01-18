@@ -116,12 +116,15 @@ class GitHubServer {
 
     if (!project.changes) return;
     
-    // Mark changes as committed and remove them
-    project.changes = project.changes.map(change => ({ ...change, committed: true }));
-    project.changes = project.changes.filter(change => !change.committed);
+    // Create a new project object with the updates (immutable update)
+    const updatedProject = {
+      ...project,
+      changes: project.changes.map(change => ({ ...change, committed: true })).filter(change => !change.committed),
+      lastCommit: commitSha
+    };
     
-    // Update last commit
-    project.lastCommit = commitSha;
+    // Update the project in the Map with the new state
+    this.projects.set(project.name, updatedProject);
     
     await this.saveProjects();
     console.error(`Cleared changes for project ${project.name} after commit ${commitSha}`);
