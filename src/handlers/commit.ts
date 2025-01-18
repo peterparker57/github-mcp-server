@@ -3,6 +3,7 @@ import { McpError, ErrorCode, CallToolRequestSchema } from '@modelcontextprotoco
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { promises as fs } from 'fs';
 import { resolve } from 'path';
+import { debugLogger } from '../utils/debug-logger.js';
 
 export async function handleCreateCommit(
   githubService: GitHubService,
@@ -11,13 +12,15 @@ export async function handleCreateCommit(
 ): Promise<ToolResponse> {
   if (!args) throw new Error('Arguments are required');
   const { owner, repo, branch, message, changes, author, sign } = args as CommitOperation;
-  console.error('Creating commit:', { owner, repo, branch, message, changesCount: changes.length });
+  await debugLogger.log('Creating commit:', { owner, repo, branch, message, changes, author, sign });
 
   try {
     const octokit = githubService.getOctokitForOwner(owner);
     const effectiveOwner = githubService.getEffectiveOwner(owner);
+    await debugLogger.log('Using GitHub credentials:', { effectiveOwner });
 
     // Get the latest commit SHA
+    await debugLogger.log('Getting latest commit SHA');
     const ref = await octokit.git.getRef({
       owner: effectiveOwner,
       repo,
@@ -28,12 +31,16 @@ export async function handleCreateCommit(
       repo,
       commit_sha: ref.data.object.sha
     });
+    await debugLogger.log('Got latest commit:', { sha: latestCommit.data.sha });
 
     // Create blobs for new/modified files
+    await debugLogger.log('Processing file changes:', { count: changes.length });
     const trees: Array<{path: string; mode: '100644'; type: 'blob'; sha?: string}> = [];
     for (const change of changes) {
+      await debugLogger.log('Processing change:', { change });
+
       if (change.operation === 'delete') {
-        // For deletions, we don't include the file in the tree
+        await debugLogger.log('Skipping delete operation in tree');
         continue;
       }
 
@@ -46,8 +53,10 @@ export async function handleCreateCommit(
         }
 
         // Read content from source file
+        await debugLogger.log('Reading source file:', { path: change.sourcePath });
         const fileContent = await fs.readFile(change.sourcePath, 'utf-8');
         
+        await debugLogger.log('Creating blob for file');
         const blob = await octokit.git.createBlob({
           owner: effectiveOwner,
           repo,
@@ -61,16 +70,19 @@ export async function handleCreateCommit(
           type: 'blob' as 'blob',
           sha: blob.data.sha
         });
+        await debugLogger.log('Added file to tree:', { path: change.path, sha: blob.data.sha });
       }
     }
 
     // Create a new tree
+    await debugLogger.log('Creating new tree');
     const tree = await octokit.git.createTree({
       owner: effectiveOwner,
       repo,
       base_tree: latestCommit.data.tree.sha,
       tree: trees
     });
+    await debugLogger.log('Created tree:', { sha: tree.data.sha });
 
     // Create the commit
     const commitParams: any = {
@@ -89,20 +101,31 @@ export async function handleCreateCommit(
       commitParams.sign = true;
     }
 
+    await debugLogger.log('Creating commit with params:', { commitParams });
     const newCommit = await octokit.git.createCommit(commitParams);
+    await debugLogger.log('Created commit:', { sha: newCommit.data.sha });
 
     // Update the reference
+    await debugLogger.log('Updating branch reference');
     await octokit.git.updateRef({
       owner: effectiveOwner,
       repo,
       ref: `heads/${branch}`,
       sha: newCommit.data.sha
     });
+    await debugLogger.log('Updated branch reference');
 
     // Clear project changes after successful commit
     if (newCommit.data && newCommit.data.sha) {
+      await debugLogger.log('Commit successful, preparing to clear changes:', { 
+        sha: newCommit.data.sha,
+        hasNotifyDevHub: !!notifyDevHub,
+        notifyDevHubType: typeof notifyDevHub
+      });
+
       try {
         // First verify the commit exists
+        await debugLogger.log('Verifying commit exists');
         await octokit.git.getCommit({
           owner: effectiveOwner,
           repo,
@@ -111,24 +134,40 @@ export async function handleCreateCommit(
         
         // Then clear project changes
         if (notifyDevHub) {
+          await debugLogger.log('Calling notifyDevHub to clear changes:', {
+            repo,
+            sha: newCommit.data.sha,
+            notifyDevHubFunction: notifyDevHub.toString()
+          });
+
           await notifyDevHub(repo, newCommit.data.sha);
-          console.error('Successfully cleared changes for commit:', newCommit.data.sha);
+          await debugLogger.log('Successfully cleared changes for commit');
+        } else {
+          await debugLogger.log('No notifyDevHub function provided');
         }
-      } catch (error) {
-        console.error('Failed to clear project changes:', error);
+      } catch (error: any) {
+        await debugLogger.log('Failed to clear project changes:', {
+          error: error.toString(),
+          errorMessage: error.message,
+          errorStack: error.stack
+        });
         return createResponse({
           commit: newCommit.data,
           warning: 'Commit successful but failed to clear project changes'
         });
       }
     } else {
-      console.error('Invalid commit response:', newCommit);
+      await debugLogger.log('Invalid commit response:', { newCommit });
       throw new McpError(ErrorCode.InternalError, 'Invalid commit response from GitHub');
     }
 
     return createResponse(newCommit.data);
   } catch (error: any) {
-    console.error('Create commit error:', error);
+    await debugLogger.log('Create commit error:', { 
+      error,
+      errorMessage: error.message,
+      errorStack: error.stack
+    });
     throw new McpError(
       ErrorCode.InternalError,
       `Failed to create commit: ${error.message}`
@@ -142,7 +181,7 @@ export async function handleListCommits(
 ): Promise<ToolResponse> {
   if (!args) throw new Error('Arguments are required');
   const { owner, repo, branch, author, since, until, path } = args;
-  console.error('Listing commits:', { owner, repo, branch, author, since, until, path });
+  await debugLogger.log('Listing commits:', { owner, repo, branch, author, since, until, path });
 
   try {
     const octokit = githubService.getOctokitForOwner(owner as string | undefined);
@@ -160,7 +199,7 @@ export async function handleListCommits(
 
     return createResponse(commits.data);
   } catch (error: any) {
-    console.error('List commits error:', error);
+    await debugLogger.log('List commits error:', { error });
     throw new McpError(
       ErrorCode.InternalError,
       `Failed to list commits: ${error.message}`
@@ -174,7 +213,7 @@ export async function handleGetCommit(
 ): Promise<ToolResponse> {
   if (!args) throw new Error('Arguments are required');
   const { owner, repo, commit_sha } = args;
-  console.error('Getting commit:', { owner, repo, commit_sha });
+  await debugLogger.log('Getting commit:', { owner, repo, commit_sha });
 
   try {
     const octokit = githubService.getOctokitForOwner(owner as string | undefined);
@@ -198,7 +237,7 @@ export async function handleGetCommit(
       files: files.data.files
     });
   } catch (error: any) {
-    console.error('Get commit error:', error);
+    await debugLogger.log('Get commit error:', { error });
     throw new McpError(
       ErrorCode.InternalError,
       `Failed to get commit: ${error.message}`
@@ -212,7 +251,7 @@ export async function handleRevertCommit(
 ): Promise<ToolResponse> {
   if (!args) throw new Error('Arguments are required');
   const { owner, repo, commit_sha, message, branch = 'main' } = args;
-  console.error('Reverting commit:', { owner, repo, commit_sha, message, branch });
+  await debugLogger.log('Reverting commit:', { owner, repo, commit_sha, message, branch });
 
   try {
     const octokit = githubService.getOctokitForOwner(owner as string | undefined);
@@ -258,7 +297,7 @@ export async function handleRevertCommit(
 
     return createResponse(revertCommit.data);
   } catch (error: any) {
-    console.error('Revert commit error:', error);
+    await debugLogger.log('Revert commit error:', { error });
     throw new McpError(
       ErrorCode.InternalError,
       `Failed to revert commit: ${error.message}`
