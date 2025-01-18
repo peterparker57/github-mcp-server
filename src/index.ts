@@ -74,7 +74,7 @@ class GitHubServer {
     'globalStorage',
     'rooveterinaryinc.roo-cline',
     'settings',
-    'devhub_projects.json'
+    'github_projects.json'
   );
 
   private async loadProjects() {
