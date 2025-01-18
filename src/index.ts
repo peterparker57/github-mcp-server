@@ -97,9 +97,12 @@ class GitHubServer {
   private async saveProjects() {
     try {
       const projects = Array.from(this.projects.values());
+      console.error('Saving projects:', JSON.stringify(projects, null, 2));
+      
       await fsPromises.mkdir(join(process.env.USERPROFILE || '', 'AppData', 'Roaming', 'Code', 'User', 'globalStorage', 'rooveterinaryinc.roo-cline', 'settings'), { recursive: true });
       await fsPromises.writeFile(this.dataPath, JSON.stringify({ projects }, null, 2), 'utf8');
-      console.error(`Saved ${projects.length} projects to disk`);
+      
+      console.error(`Saved ${projects.length} projects to disk at ${this.dataPath}`);
     } catch (error) {
       console.error('Error saving projects:', error);
       throw error;
@@ -110,8 +113,12 @@ class GitHubServer {
     console.error('clearProjectChanges called with:', { repo, commitSha });
     console.error('Current projects:', JSON.stringify(Array.from(this.projects.entries()), null, 2));
 
-    // Find project by repository name
-    const project = Array.from(this.projects.values()).find(p => p.repository?.name === repo);
+    // Find project by repository name (case-insensitive)
+    console.error('Looking for project with repo:', repo);
+    const project = Array.from(this.projects.values()).find(p => {
+      console.error('Checking project:', p.name, 'with repo:', p.repository?.name);
+      return p.repository?.name?.toLowerCase() === repo.toLowerCase();
+    });
     if (!project) {
       console.error(`No project found with repository name ${repo}`);
       return;
